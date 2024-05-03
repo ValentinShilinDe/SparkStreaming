@@ -4,20 +4,19 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 
 object ProducerApp extends App{
-
   val spark = SparkSession
     .builder()
     .master("local[*]")
-    .appName("WriterJob")
+    .appName("test")
     .getOrCreate()
 
   val userSchema = new StructType()
     .add("Name", "string")
     .add("Author", "string")
-    .add("Rating", "double")
+    .add("User Rating", "double")
     .add("Reviews", "long")
     .add("Price", "double")
-    .add("Year", "int")
+    .add("Year", "integer")
     .add("Genre", "string")
 
   import spark.implicits._
@@ -33,7 +32,8 @@ object ProducerApp extends App{
     .outputMode("append")
     .format("kafka")
     .option("kafka.bootstrap.servers", "localhost:29093")
-    .option("topic", "books")
+    .option("topic", "test")
+    .option("checkpointLocation", "checkdir")
     .start()
 
 
