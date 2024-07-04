@@ -49,7 +49,7 @@ object ProducerApp extends App {
     .writeStream
     .outputMode("append")
     .format("kafka")
-    .option("kafka.bootstrap.servers", "localhost:9093")
+    .option("kafka.bootstrap.servers", "localhost:29093")
     .option("topic", "test_topic1")
     .option("checkpointLocation", "checkdir")
     .start()
