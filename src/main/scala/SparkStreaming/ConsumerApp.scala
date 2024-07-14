@@ -15,7 +15,7 @@ object ConsumerApp extends App {
   val kafkaDF: DataFrame = spark.readStream
     .format("kafka")
     .option("kafka.bootstrap.servers", "localhost:29093")
-    .option("subscribe", "test_topic1")
+    .option("topic", "books")
     .option("startingOffsets", "earliest")
     .load()
 
@@ -33,12 +33,13 @@ object ConsumerApp extends App {
         .add("Genre", StringType)
     ).as("data"))
     .select("data.*")
+    .filter(col("Rating") > 4.0)
 
   // Process the parsed data (for example, print it to console)
   val query = parsedDF.writeStream
     .outputMode("append")
-    .format("console")
-    .option("truncate", "false")
+    .format("parquet")
+    .option("path", "/warehouse/book")
     .start()
 
   // Await stream termination
