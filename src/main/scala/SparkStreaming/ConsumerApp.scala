@@ -7,15 +7,15 @@ object ConsumerApp extends App {
   // Create SparkSession
   val spark: SparkSession = SparkSession
     .builder()
-    .master("local[*]")
+    .master("spark://192.168.1.50:7077")
     .appName("KafkaConsumer")
     .getOrCreate()
 
   // Read from Kafka topic
   val kafkaDF: DataFrame = spark.readStream
     .format("kafka")
-    .option("kafka.bootstrap.servers", "localhost:29093")
-    .option("subscribe", "test_topic1")
+    .option("kafka.bootstrap.servers", "192.168.1.50:9092")
+    .option("subscribe", "books")
     .option("startingOffsets", "earliest")
     .load()
 
@@ -26,7 +26,7 @@ object ConsumerApp extends App {
         .add("timestamp", StringType)
         .add("Name", StringType)
         .add("Author", StringType)
-        .add("Rating", DoubleType)
+        .add("User Rating", DoubleType)
         .add("Reviews", LongType)
         .add("Price", DoubleType)
         .add("Year", IntegerType)
