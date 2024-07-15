@@ -1,62 +1,56 @@
+
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.{StructType, StructField, IntegerType}
+import org.apache.spark.SparkFiles
+
 
 object ProducerApp extends App {
-  // Create SparkSession
   val spark: SparkSession = SparkSession
     .builder()
-    .master("local[*]")
+    .master("spark://192.168.1.50:7077")
     .appName("KafkaProducer")
     .getOrCreate()
 
-  // Sample data array
-  val dataArray = Seq(
-    ("book1", "author1", 4.5, 100L, 25.0, 2021, "Fiction"),
-    ("book2", "author2", 4.2, 150L, 30.0, 2020, "Fantasy"),
-    ("book3", "author3", 4.7, 200L, 20.0, 2019, "Mystery")
-  )
+  val csvDF = spark.read
+  .option("header", "true")
+  .option("sep", ",") 
+  .option("inferSchema", "true") 
+  .csv("/home/bdron/source/bestsellers with categories.csv")
 
-  // Convert array to DataFrame
-  import spark.implicits._
-  val staticDF: DataFrame = dataArray.zipWithIndex.toDF("data", "staticIndex")
-    .select(
-      col("data._1").as("Name"),
-      col("data._2").as("Author"),
-      col("data._3").as("Rating"),
-      col("data._4").as("Reviews"),
-      col("data._5").as("Price"),
-      col("data._6").as("Year"),
-      col("data._7").as("Genre"),
-      col("staticIndex")
-    )
+  // преобразование DataFrame в RDD для добавления индекса записи
+  val rddWithIndex = csvDF.rdd.zipWithIndex.map {
+    case (row, index) => Row.fromSeq(row.toSeq :+ index.toInt + 1)
+  }
 
-  // Create a streaming DataFrame using the rate source to simulate a stream
+  // определение новой схемы с дополнительным столбцом индекса
+  val newSchema = StructType(csvDF.schema.fields :+ StructField("index", IntegerType, false))
+
+  // преобразование RDD обратно в DataFrame с новой схемой
+  val indexedDF = spark.createDataFrame(rddWithIndex, newSchema)
+
+  // создание стримингового DataFrame с использованием RateSource
   val rateDF = spark.readStream
     .format("rate")
-    .option("rowsPerSecond", 1)
+    .option("rowsPerSecond", 1) 
     .load()
-    .withColumn("streamingIndex", col("value"))
+    
+  // присоединение DataFrame с временной меткой к RateSource
+  val streamingDF = rateDF
+    .join(indexedDF, rateDF("value") === indexedDF("index"))
+    .selectExpr("CAST(value AS STRING) AS key", "to_json(struct(Name, Author, `User Rating`, Reviews, Price, Year, Genre, timestamp)) AS value")
 
-  // Join the static DataFrame with the streaming DataFrame
-  val joinedDF = rateDF
-    .join(staticDF, rateDF("value") % staticDF.count() === staticDF("staticIndex"))
-    .select("timestamp", "Name", "Author", "Rating", "Reviews", "Price", "Year", "Genre")
-
-  // Convert the joined DataFrame to JSON and write to Kafka
-  val stream = joinedDF
-    .selectExpr("CAST(NULL AS STRING) AS key", "to_json(struct(*)) AS value")
-    .writeStream
-    .outputMode("append")
+    // Запись DataFrame в Kafka
+  streamingDF.writeStream
     .format("kafka")
-    .option("kafka.bootstrap.servers", "localhost:29093")
-    .option("topic", "test_topic1")
-    .option("checkpointLocation", "checkdir")
+    .option("kafka.bootstrap.servers", "localhost:9092") 
+    .option("topic", "books") 
+    .option("checkpointLocation", "/tmp/checkpoint") 
     .start()
+    .awaitTermination()
 
-  // Await stream termination
-  stream.awaitTermination()
 
-  // Stop SparkSession
   spark.stop()
 }
